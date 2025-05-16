@@ -1,0 +1,24 @@
+# Logs
+*.log
+firebase-debug.log
+firestore-debug.log
+
+# Dependencias y builds
+node_modules
+dist
+dist-ssr
+.vite/
+*.local
+
+# Variables de entorno
+.env
+.env.local
+.env.development
+.env.production
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.DS_Store
+*.swp
+*.swo
