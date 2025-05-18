@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from 'react';
 import { db } from '../services/firebase';
 import { collection, addDoc } from 'firebase/firestore';
@@ -60,27 +61,28 @@ export default function ProductForm() {
   };
 
   return (
-    <div className="p-4">
+    // Ajusta las clases para responsive (ancho máximo y centrado)
+    <div className="p-4 max-w-md mx-auto"> {/* Añadidas max-w-md y mx-auto */}
       <h3 className="text-xl font-bold mb-2">Agregar Producto</h3>
-      <form onSubmit={handleSubmit}>
+      <form onSubmit={handleSubmit} className="flex flex-col gap-4"> {/* Añadido gap para espacio entre campos */}
         <input
           type="text"
           value={name}
           onChange={(e) => setName(e.target.value)}
           placeholder="Nombre del producto"
-          className="border p-2 mb-2 w-full"
+          className="border p-2 w-full rounded" // Añadida rounded
         />
         <input
           type="number"
           value={price}
           onChange={(e) => setPrice(e.target.value)}
           placeholder="Precio"
-          className="border p-2 mb-2 w-full"
+          className="border p-2 w-full rounded" // Añadida rounded
         />
         <select
           value={category}
           onChange={(e) => setCategory(e.target.value)}
-          className="border p-2 mb-2 w-full"
+          className="border p-2 w-full rounded" // Añadida rounded
         >
           <option value="Herramientas">Herramientas</option>
           <option value="Alimentos">Alimentos</option>
@@ -89,15 +91,15 @@ export default function ProductForm() {
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
           placeholder="Notas (opcional)"
-          className="border p-2 mb-2 w-full"
+          className="border p-2 w-full rounded" // Añadida rounded
           rows="3"
         />
-        <p className="text-sm mb-2">
+        <p className="text-sm"> {/* Eliminado mb-2 */}
           Ubicación: {location.lat && location.lng
             ? `Lat: ${location.lat.toFixed(6)}, Lng: ${location.lng.toFixed(6)}`
             : 'Obteniendo ubicación...'}
         </p>
-        <button type="submit" className="bg-blue-500 text-white p-2">
+        <button type="submit" className="bg-blue-500 text-white p-2 rounded hover:bg-blue-600 transition-colors duration-200"> {/* Añadidos rounded, hover y transition */}
           Agregar
         </button>
         {error && <p className="text-red-500 mt-2">{error}</p>}
