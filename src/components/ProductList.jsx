@@ -4,7 +4,7 @@ import { db, auth } from '../services/firebase';
 import { collection, onSnapshot, deleteDoc, doc, updateDoc, addDoc, serverTimestamp } from 'firebase/firestore';
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
-import { useNavigate } from 'react-router-dom'; // Añadida esta línea
+import { useNavigate } from 'react-router-dom'; // Aseguramos la importación
 
 export default function ProductList() {
   const [products, setProducts] = useState([]);
@@ -444,10 +444,11 @@ export default function ProductList() {
                       )}
                     </div>
                     <div className="mt-4 flex gap-2">
+                      {/* Botón "Ver precios" desactivado hasta implementar /prices */}
                       <button
-                        onClick={() => navigate('/prices')}
+                        onClick={() => alert('Comparador de precios no implementado aún')}
                         className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex-1 transition-all"
-                        disabled={!product.prices || product.prices.length === 0}
+                        disabled={true}
                       >
                         Ver precios
                       </button>

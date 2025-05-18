@@ -30,16 +30,6 @@ export default function Sidebar() {
         >
           Home
         </NavLink>
-        <NavLink
-          to="/prices"
-          className={({ isActive }) =>
-            `p-3 rounded-lg transition-colors ${
-              isActive ? 'bg-blue-600 text-white' : 'hover:bg-gray-700'
-            }`
-          }
-        >
-          Comparador de Precios
-        </NavLink>
         <button
           onClick={handleLogout}
           className="p-3 rounded-lg text-left hover:bg-gray-700 transition-colors"
