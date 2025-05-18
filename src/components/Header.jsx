@@ -1,4 +1,4 @@
-jsx
+
 import { useState } from "react";
 
 // Recibe la prop toggleSidebar
