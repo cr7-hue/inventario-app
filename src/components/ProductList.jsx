@@ -1,6 +1,9 @@
+// src/components/ProductList.jsx
 import { useState, useEffect } from 'react';
-import { db } from '../services/firebase';
+import { db, auth } from '../services/firebase';
 import { collection, onSnapshot, deleteDoc, doc, updateDoc, addDoc, serverTimestamp } from 'firebase/firestore';
+import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
+import 'leaflet/dist/leaflet.css';
 
 export default function ProductList() {
   const [products, setProducts] = useState([]);
@@ -13,53 +16,147 @@ export default function ProductList() {
   const [searchTerm, setSearchTerm] = useState('');
   const [sortBy, setSortBy] = useState('name');
   const [sortOrder, setSortOrder] = useState('asc');
+  const [categoryFilter, setCategoryFilter] = useState('Todos');
   const [isOffline, setIsOffline] = useState(false);
-
- 
   const [showModal, setShowModal] = useState(false);
   const [newName, setNewName] = useState('');
   const [newPrice, setNewPrice] = useState('');
   const [newCategory, setNewCategory] = useState('Herramientas');
   const [newNotes, setNewNotes] = useState('');
   const [addError, setAddError] = useState(null);
+  const [successMessage, setSuccessMessage] = useState(null);
+  const [location, setLocation] = useState({ lat: null, lng: null });
+  const [showMap, setShowMap] = useState(false);
+
+  const categories = [
+    'Herramientas',
+    'Alimentos',
+    'Agua e Higiene',
+    'Vivienda y Energía',
+    'Ropa básica',
+    'Tecnología',
+    'Librería',
+    'Muebles',
+    'Farmacéutica',
+    'Gimnasios',
+    'Trabajos',
+  ];
 
   useEffect(() => {
+    console.log('Iniciando carga de productos');
     const cachedProducts = localStorage.getItem('products');
     if (cachedProducts) {
+      console.log('Cargando desde localStorage:', JSON.parse(cachedProducts));
       setProducts(JSON.parse(cachedProducts));
     }
 
-    const unsubscribe = onSnapshot(collection(db, 'products'), (snapshot) => {
-      const productList = snapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-      }));
-      setProducts(productList);
-      localStorage.setItem('products', JSON.stringify(productList));
-      setIsOffline(false);
-    }, (err) => {
-      setError('Error al cargar los productos: ' + err.message);
-      setIsOffline(true);
-    });
+    const unsubscribe = onSnapshot(
+      collection(db, 'products'),
+      (snapshot) => {
+        const productList = snapshot.docs.map((doc) => ({
+          id: doc.id,
+          ...doc.data(),
+        }));
+        console.log('Productos recibidos:', productList);
+        setProducts(productList);
+        localStorage.setItem('products', JSON.stringify(productList));
+        setIsOffline(false);
+        setError(null);
+      },
+      (err) => {
+        console.error('Error al cargar productos:', err.code, err.message);
+        setError(`Error al cargar productos: ${err.message}`);
+        setIsOffline(true);
+      }
+    );
 
-    const handleOffline = () => setIsOffline(true);
-    const handleOnline = () => setIsOffline(false);
+    const handleOffline = () => {
+      console.log('Modo offline');
+      setIsOffline(true);
+    };
+    const handleOnline = () => {
+      console.log('Modo online');
+      setIsOffline(false);
+    };
 
     window.addEventListener('offline', handleOffline);
     window.addEventListener('online', handleOnline);
 
     return () => {
+      console.log('Desmontando suscripción');
       unsubscribe();
       window.removeEventListener('offline', handleOffline);
       window.removeEventListener('online', handleOnline);
     };
   }, []);
 
+  useEffect(() => {
+    if (showModal && navigator.geolocation) {
+      console.log('Solicitando geolocalización');
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const { latitude, longitude } = position.coords;
+          console.log('Ubicación obtenida:', { lat: latitude, lng: longitude });
+          setLocation({ lat: latitude, lng: longitude });
+        },
+        (err) => {
+          console.error('Error de geolocalización:', err.message);
+          setAddError('No se pudo obtener la ubicación: ' + err.message);
+        }
+      );
+    }
+  }, [showModal]);
+
+  const handleAddProduct = async (e) => {
+    e.preventDefault();
+    console.log('Intentando agregar producto:', { newName, newPrice, newCategory, newNotes, location });
+    if (!newName || !newPrice) {
+      console.log('Campos vacíos');
+      setAddError('Por favor, completa nombre y precio.');
+      return;
+    }
+    if (isNaN(newPrice) || parseFloat(newPrice) <= 0) {
+      console.log('Precio inválido');
+      setAddError('El precio debe ser un número positivo.');
+      return;
+    }
+    try {
+      const newProduct = {
+        name: newName,
+        price: parseFloat(newPrice),
+        category: newCategory,
+        notes: newNotes,
+        createdAt: serverTimestamp(),
+        isFavorite: false,
+        ...(auth.currentUser && { userId: auth.currentUser.uid }),
+        ...(location.lat && location.lng && { location: { lat: location.lat, lng: location.lng } }),
+      };
+      console.log('Enviando a Firestore:', newProduct);
+      const docRef = await addDoc(collection(db, 'products'), newProduct);
+      console.log('Producto agregado, ID:', docRef.id);
+      setShowModal(false);
+      setNewName('');
+      setNewPrice('');
+      setNewCategory('Herramientas');
+      setNewNotes('');
+      setLocation({ lat: null, lng: null });
+      setShowMap(false);
+      setAddError(null);
+      setSuccessMessage('¡Producto agregado con éxito!');
+      setTimeout(() => setSuccessMessage(null), 3000);
+    } catch (err) {
+      console.error('Error al agregar producto:', err.code, err.message);
+      setAddError(`No se pudo agregar el producto: ${err.message}`);
+    }
+  };
+
   const handleDelete = async (id) => {
     if (window.confirm('¿Estás seguro de eliminar este producto?')) {
       try {
         await deleteDoc(doc(db, 'products', id));
+        console.log('Producto eliminado, ID:', id);
       } catch (err) {
+        console.error('Error al eliminar:', err.code, err.message);
         setError('Error al eliminar el producto: ' + err.message);
       }
     }
@@ -82,7 +179,6 @@ export default function ProductList() {
       setError('El precio debe ser un número positivo.');
       return;
     }
-
     try {
       await updateDoc(doc(db, 'products', id), {
         name: editName,
@@ -90,6 +186,7 @@ export default function ProductList() {
         category: editCategory,
         notes: editNotes,
       });
+      console.log('Producto actualizado, ID:', id);
       setEditingId(null);
       setEditName('');
       setEditPrice('');
@@ -97,217 +194,247 @@ export default function ProductList() {
       setEditNotes('');
       setError(null);
     } catch (err) {
+      console.error('Error al guardar cambios:', err.code, err.message);
       setError('Error al guardar los cambios: ' + err.message);
     }
   };
 
-  // --- NUEVO: Función para agregar producto ---
-  const handleAddProduct = async (e) => {
-    e.preventDefault();
-    if (!newName || !newPrice) {
-      setAddError('Por favor, completa todos los campos.');
-      return;
-    }
-    if (isNaN(newPrice) || parseFloat(newPrice) <= 0) {
-      setAddError('El precio debe ser un número positivo.');
-      return;
-    }
+  const toggleFavorite = async (id, currentFavorite) => {
     try {
-      await addDoc(collection(db, 'products'), {
-        name: newName,
-        price: parseFloat(newPrice),
-        category: newCategory,
-        notes: newNotes,
-        createdAt: serverTimestamp(),
+      await updateDoc(doc(db, 'products', id), {
+        isFavorite: !currentFavorite,
       });
-      setShowModal(false);
-      setNewName('');
-      setNewPrice('');
-      setNewCategory('Herramientas');
-      setNewNotes('');
-      setAddError(null);
+      console.log('Favorito actualizado, ID:', id, 'isFavorite:', !currentFavorite);
     } catch (err) {
-      setAddError('Error al agregar el producto: ' + err.message);
+      console.error('Error al actualizar favorito:', err.code, err.message);
+      setError('Error al marcar como favorito: ' + err.message);
     }
   };
 
-  const filteredProducts = products.filter((product) =>
-    product.name.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredProducts = products.filter((product) => {
+    const matchesSearch = product.name.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesCategory =
+      categoryFilter === 'Todos' ||
+      (categoryFilter === 'Favoritos' ? product.isFavorite : product.category === categoryFilter);
+    return matchesSearch && matchesCategory;
+  });
 
   const sortedProducts = [...filteredProducts].sort((a, b) => {
     const valueA = sortBy === 'name' ? a.name.toLowerCase() : a.price;
     const valueB = sortBy === 'name' ? b.name.toLowerCase() : b.price;
-    if (sortOrder === 'asc') {
-      return valueA > valueB ? 1 : -1;
-    } else {
-      return valueA < valueB ? 1 : -1;
-    }
+    return sortOrder === 'asc' ? (valueA > valueB ? 1 : -1) : (valueA < valueB ? 1 : -1);
   });
 
   const exportToCSV = () => {
-    const headers = ['ID,Name,Price,Category,Notes,CreatedAt,Location'];
+    const headers = ['ID,Nombre,Precio,Categoría,Notas,FechaCreación,Latitud,Longitud,Favorito'];
     const rows = sortedProducts.map((product) =>
-      `${product.id},${product.name},${product.price.toFixed(2)},${product.category || ''},${product.notes || ''},${product.createdAt?.toDate?.().toISOString?.() || ''},${product.location ? `${product.location.lat},${product.location.lng}` : ''}`
+      `${product.id},${product.name},${product.price.toFixed(2)},${product.category || ''},${product.notes || ''},${product.createdAt?.toDate?.().toISOString?.() || ''},${product.location?.lat || ''},${product.location?.lng || ''},${product.isFavorite ? 'Sí' : 'No'}`
     );
     const csvContent = [headers, ...rows].join('\n');
     const blob = new Blob([csvContent], { type: 'text/csv' });
     const url = window.URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = 'inventario_products.csv';
+    link.download = 'inventario_productos.csv';
     link.click();
     window.URL.revokeObjectURL(url);
   };
 
   return (
-    <>
-      <div className="p-4">
-        <h3 className="text-xl font-bold mb-2 text-white">Lista de Productos</h3>
-        {isOffline && (
-          <p className="text-yellow-500 mb-2">
-            Estás offline. Mostrando datos guardados localmente.
-          </p>
-        )}
+    <div className="p-4 max-w-7xl mx-auto">
+      <h3 className="text-2xl font-bold mb-4 text-white">Lista de Productos</h3>
+      {isOffline && (
+        <p className="text-yellow-400 bg-yellow-900/50 p-2 rounded mb-4">
+          Estás offline. Mostrando datos locales.
+        </p>
+      )}
+      {error && (
+        <p className="text-red-400 bg-red-900/50 p-2 rounded mb-4">{error}</p>
+      )}
+      <div className="mb-4 flex flex-wrap items-center gap-4">
         <input
           type="text"
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
           placeholder="Buscar por nombre..."
-          className="border p-2 mb-4 w-full rounded"
+          className="border-none bg-gray-800/50 text-white placeholder-gray-400 p-3 rounded-lg w-full sm:w-64 focus:ring-2 focus:ring-blue-500 transition-all"
         />
-        <div className="mb-4 flex flex-wrap items-center gap-2">
-          <label className="mr-2 text-white">Ordenar por:</label>
+        <div className="flex items-center gap-2">
+          <label className="text-white text-sm">Filtrar:</label>
+          <select
+            value={categoryFilter}
+            onChange={(e) => setCategoryFilter(e.target.value)}
+            className="border-none bg-gray-800/50 text-white p-2 rounded-lg focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="Todos">Todos</option>
+            <option value="Favoritos">Favoritos</option>
+            {categories.map((cat) => (
+              <option key={cat} value={cat}>
+                {cat}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="flex items-center gap-2">
+          <label className="text-white text-sm">Ordenar por:</label>
           <select
             value={sortBy}
             onChange={(e) => setSortBy(e.target.value)}
-            className="border p-1 rounded"
+            className="border-none bg-gray-800/50 text-white p-2 rounded-lg focus:ring-2 focus:ring-blue-500"
           >
             <option value="name">Nombre</option>
             <option value="price">Precio</option>
           </select>
-          <select
-            value={sortOrder}
-            onChange={(e) => setSortOrder(e.target.value)}
-            className="border p-1 rounded"
-          >
-            <option value="asc">Ascendente</option>
-            <option value="desc">Descendente</option>
-          </select>
-          <button
-            onClick={exportToCSV}
-            className="bg-blue-500 hover:bg-blue-600 text-white p-2 rounded transition-all ml-auto"
-          >
-            Exportar a CSV
-          </button>
         </div>
-        {error && <p className="text-red-500 mb-2">{error}</p>}
-        {sortedProducts.length === 0 ? (
-          <p className="text-white">No hay productos que coincidan con la búsqueda.</p>
-        ) : (
-          <ul className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {sortedProducts.map((product) => (
-              <li
-                key={product.id}
-                className="bg-white/20 backdrop-blur rounded-xl shadow-lg p-6 hover:shadow-2xl hover:scale-105 transition-all duration-200 border border-white/10 flex flex-col justify-between"
-              >
-                {editingId === product.id ? (
-                  <div className="w-full">
-                    <input
-                      type="text"
-                      value={editName}
-                      onChange={(e) => setEditName(e.target.value)}
-                      className="border p-1 mb-1 w-full rounded"
-                    />
-                    <input
-                      type="number"
-                      value={editPrice}
-                      onChange={(e) => setEditPrice(e.target.value)}
-                      className="border p-1 mb-1 w-full rounded"
-                    />
-                    <select
-                      value={editCategory}
-                      onChange={(e) => setEditCategory(e.target.value)}
-                      className="border p-1 mb-1 w-full rounded"
-                    >
-                      <option value="Herramientas">Herramientas</option>
-                      <option value="Alimentos">Alimentos</option>
-                    </select>
-                    <textarea
-                      value={editNotes}
-                      onChange={(e) => setEditNotes(e.target.value)}
-                      className="border p-1 mb-1 w-full rounded"
-                      rows="3"
-                    />
+        <select
+          value={sortOrder}
+          onChange={(e) => setSortOrder(e.target.value)}
+          className="border-none bg-gray-800/50 text-white p-2 rounded-lg focus:ring-2 focus:ring-blue-500"
+        >
+          <option value="asc">Ascendente</option>
+          <option value="desc">Descendente</option>
+        </select>
+        <button
+          onClick={exportToCSV}
+          className="bg-blue-600 hover:bg-blue-700 text-white p-2 rounded-lg transition-all ml-auto"
+        >
+          Exportar a CSV
+        </button>
+      </div>
+      {sortedProducts.length === 0 ? (
+        <p className="text-white bg-gray-800/50 p-4 rounded-lg">
+          No hay productos que coincidan con la búsqueda.
+        </p>
+      ) : (
+        <ul className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+          {sortedProducts.map((product) => (
+            <li
+              key={product.id}
+              className="bg-gray-800/70 backdrop-blur-sm rounded-xl shadow-lg p-6 border border-gray-700/50 flex flex-col justify-between transition-all hover:scale-105 hover:shadow-xl"
+            >
+              {editingId === product.id ? (
+                <div className="flex flex-col gap-3 w-full">
+                  <input
+                    type="text"
+                    value={editName}
+                    onChange={(e) => setEditName(e.target.value)}
+                    className="border-none bg-gray-700/50 text-white p-2 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    placeholder="Nombre"
+                  />
+                  <input
+                    type="number"
+                    value={editPrice}
+                    onChange={(e) => setEditPrice(e.target.value)}
+                    className="border-none bg-gray-700/50 text-white p-2 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    placeholder="Precio"
+                    step="0.01"
+                  />
+                  <select
+                    value={editCategory}
+                    onChange={(e) => setEditCategory(e.target.value)}
+                    className="border-none bg-gray-700/50 text-white p-2 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  >
+                    {categories.map((cat) => (
+                      <option key={cat} value={cat}>
+                        {cat}
+                      </option>
+                    ))}
+                  </select>
+                  <textarea
+                    value={editNotes}
+                    onChange={(e) => setEditNotes(e.target.value)}
+                    className="border-none bg-gray-700/50 text-white p-2 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    rows="3"
+                    placeholder="Notas"
+                  />
+                  <div className="flex gap-2">
                     <button
                       onClick={() => handleSave(product.id)}
-                      className="bg-green-500 hover:bg-green-600 text-white p-1 mr-2 rounded transition-all"
+                      className="bg-green-600 hover:bg-green-700 text-white p-2 rounded-lg flex-1 transition-all"
                     >
                       Guardar
                     </button>
                     <button
                       onClick={() => setEditingId(null)}
-                      className="bg-gray-500 hover:bg-gray-600 text-white p-1 rounded transition-all"
+                      className="bg-gray-600 hover:bg-gray-700 text-white p-2 rounded-lg flex-1 transition-all"
                     >
                       Cancelar
                     </button>
                   </div>
-                ) : (
-                  <>
-                    <div>
-                      <span className="text-xl font-bold text-white">{product.name}</span>
-                      <span className="block text-blue-200 font-semibold">${product.price.toFixed(2)}</span>
-                      <span className="block text-sm text-blue-100 mb-2">{product.category}</span>
-                      {product.notes && <small className="block text-gray-200">{product.notes}</small>}
-                      {product.location && (
-                        <small className="block text-gray-300">
-                          Lat: {product.location.lat.toFixed(6)}, Lng: {product.location.lng.toFixed(6)}
-                        </small>
-                      )}
-                    </div>
-                    <div className="mt-4 flex gap-2">
+                </div>
+              ) : (
+                <>
+                  <div className="flex flex-col gap-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-xl font-bold text-white truncate flex-1">
+                        {product.name}
+                      </span>
                       <button
-                        onClick={() => handleEdit(product)}
-                        className="bg-yellow-500 hover:bg-yellow-600 text-white px-3 py-1 rounded transition-all"
+                        onClick={() => toggleFavorite(product.id, product.isFavorite)}
+                        className={`text-lg p-1 w-6 h-6 ${product.isFavorite ? 'text-yellow-400' : 'text-gray-400'} hover:text-yellow-300 transition-colors`}
+                        title={product.isFavorite ? 'Quitar de favoritos' : 'Marcar como favorito'}
                       >
-                        Editar
-                      </button>
-                      <button
-                        onClick={() => handleDelete(product.id)}
-                        className="bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded transition-all"
-                      >
-                        Eliminar
+                        {product.isFavorite ? '🌟' : '☆'}
                       </button>
                     </div>
-                  </>
-                )}
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-
-     
-      {/* MODAL PARA AGREGAR PRODUCTO */}
+                    <span className="text-blue-300 font-semibold">${product.price.toFixed(2)}</span>
+                    <span className="text-sm text-blue-200">{product.category}</span>
+                    {product.notes && (
+                      <small className="text-gray-300 line-clamp-3">{product.notes}</small>
+                    )}
+                    {product.location && (
+                      <small className="text-gray-300">
+                        Ubicación: {product.location.lat.toFixed(4)},{' '}
+                        {product.location.lng.toFixed(4)}
+                      </small>
+                    )}
+                  </div>
+                  <div className="mt-4 flex gap-2">
+                    <button
+                      onClick={() => handleEdit(product)}
+                      className="bg-yellow-600 hover:bg-yellow-700 text-white px-4 py-2 rounded-lg flex-1 transition-all"
+                    >
+                      Editar
+                    </button>
+                    <button
+                      onClick={() => handleDelete(product.id)}
+                      className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg flex-1 transition-all"
+                    >
+                      Eliminar
+                    </button>
+                  </div>
+                </>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
       {showModal && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
-          <div className="bg-gradient-to-br from-blue-900 via-blue-800 to-blue-600 rounded-2xl shadow-2xl p-8 w-full max-w-md relative border border-blue-400">
+          <div className="bg-gray-800 rounded-2xl shadow-2xl p-6 w-full max-w-md sm:max-w-lg border border-gray-700">
             <button
-              className="absolute top-2 right-2 text-blue-200 hover:text-white text-2xl font-bold"
+              className="absolute top-4 right-4 text-gray-300 hover:text-white text-2xl font-bold"
               onClick={() => setShowModal(false)}
               title="Cerrar"
             >
               ×
             </button>
-            <h2 className="text-2xl font-extrabold mb-4 text-white tracking-wide">Agregar Producto</h2>
-            {addError && <p className="text-red-300 mb-2">{addError}</p>}
+            <h2 className="text-2xl font-bold mb-4 text-white">Agregar Producto</h2>
+            {addError && (
+              <p className="text-red-400 bg-red-900/50 p-2 rounded mb-4">{addError}</p>
+            )}
+            {successMessage && (
+              <p className="text-green-400 bg-green-900/50 p-2 rounded mb-4">
+                {successMessage}
+              </p>
+            )}
             <form onSubmit={handleAddProduct} className="flex flex-col gap-4">
               <input
                 type="text"
                 value={newName}
                 onChange={(e) => setNewName(e.target.value)}
                 placeholder="Nombre"
-                className="border-none bg-blue-100/80 focus:bg-white focus:ring-2 focus:ring-blue-400 p-3 rounded-lg text-gray-900 font-semibold transition-all"
+                className="border-none bg-gray-700/50 text-white p-3 rounded-lg focus:ring-2 focus:ring-blue-500 transition-all"
                 required
               />
               <input
@@ -315,7 +442,7 @@ export default function ProductList() {
                 value={newPrice}
                 onChange={(e) => setNewPrice(e.target.value)}
                 placeholder="Precio"
-                className="border-none bg-blue-100/80 focus:bg-white focus:ring-2 focus:ring-blue-400 p-3 rounded-lg text-gray-900 font-semibold transition-all"
+                className="border-none bg-gray-700/50 text-white p-3 rounded-lg focus:ring-2 focus:ring-blue-500 transition-all"
                 required
                 min="0"
                 step="0.01"
@@ -323,21 +450,54 @@ export default function ProductList() {
               <select
                 value={newCategory}
                 onChange={(e) => setNewCategory(e.target.value)}
-                className="border-none bg-blue-100/80 focus:bg-white focus:ring-2 focus:ring-blue-400 p-3 rounded-lg text-gray-900 font-semibold transition-all"
+                className="border-none bg-gray-700/50 text-white p-3 rounded-lg focus:ring-2 focus:ring-blue-500 transition-all"
               >
-                <option value="Herramientas">Herramientas</option>
-                <option value="Alimentos">Alimentos</option>
+                {categories.map((cat) => (
+                  <option key={cat} value={cat}>
+                    {cat}
+                  </option>
+                ))}
               </select>
               <textarea
                 value={newNotes}
                 onChange={(e) => setNewNotes(e.target.value)}
                 placeholder="Notas"
-                className="border-none bg-blue-100/80 focus:bg-white focus:ring-2 focus:ring-blue-400 p-3 rounded-lg text-gray-900 font-semibold transition-all"
-                rows="2"
+                className="border-none bg-gray-700/50 text-white p-3 rounded-lg focus:ring-2 focus:ring-blue-500 transition-all"
+                rows="3"
               />
+              {location.lat && location.lng && (
+                <p className="text-gray-300 text-sm">
+                  Ubicación: {location.lat.toFixed(4)}, {location.lng.toFixed(4)}
+                </p>
+              )}
+              <button
+                type="button"
+                onClick={() => setShowMap(!showMap)}
+                className="bg-gray-600 hover:bg-gray-700 text-white p-2 rounded-lg transition-all"
+              >
+                {showMap ? 'Ocultar mapa' : 'Mostrar mapa'}
+              </button>
+              {showMap && location.lat && location.lng && (
+                <div className="h-64 rounded-lg overflow-hidden">
+                  <MapContainer
+                    center={[location.lat, location.lng]}
+                    zoom={13}
+                    style={{ height: '100%', width: '100%' }}
+                    className="rounded-lg"
+                  >
+                    <TileLayer
+                      url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                      attribution='© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                    />
+                    <Marker position={[location.lat, location.lng]}>
+                      <Popup>Ubicación actual</Popup>
+                    </Marker>
+                  </MapContainer>
+                </div>
+              )}
               <button
                 type="submit"
-                className="bg-gradient-to-r from-blue-500 to-blue-700 hover:from-blue-600 hover:to-blue-800 text-white rounded-lg px-4 py-2 mt-2 font-bold shadow-md transition-all"
+                className="bg-blue-600 hover:bg-blue-700 text-white p-3 rounded-lg font-semibold transition-all"
               >
                 Agregar
               </button>
@@ -345,15 +505,13 @@ export default function ProductList() {
           </div>
         </div>
       )}
-
-      {/* BOTÓN FLOTANTE */}
       <button
-        className="fixed bottom-8 right-8 bg-blue-600 hover:bg-blue-700 text-white rounded-full w-16 h-16 flex items-center justify-center text-3xl shadow-lg transition-all"
+        className="fixed bottom-6 right-6 bg-blue-600 hover:bg-blue-700 text-white rounded-full w-14 h-14 flex items-center justify-center text-3xl shadow-lg transition-transform hover:scale-110"
         title="Agregar producto"
         onClick={() => setShowModal(true)}
       >
         +
       </button>
-    </>
+    </div>
   );
 }
