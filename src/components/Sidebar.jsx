@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 
-export default function Sidebar() {
+export default function sidebar() {
   return (
     <aside className="fixed top-0 left-0 h-full w-64 bg-gray-900 shadow-lg z-40">
       <div className="flex items-center justify-center h-20 border-b border-gray-800">
