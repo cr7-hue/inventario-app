@@ -4,15 +4,17 @@ import { db, auth } from '../services/firebase';
 import { collection, onSnapshot, deleteDoc, doc, updateDoc, addDoc, serverTimestamp } from 'firebase/firestore';
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
+import { useNavigate } from 'react-router-dom'; // Añadida esta línea
 
 export default function ProductList() {
   const [products, setProducts] = useState([]);
   const [error, setError] = useState(null);
   const [editingId, setEditingId] = useState(null);
   const [editName, setEditName] = useState('');
-  const [editPrice, setEditPrice] = useState('');
   const [editCategory, setEditCategory] = useState('Herramientas');
   const [editNotes, setEditNotes] = useState('');
+  const [editPrice, setEditPrice] = useState('');
+  const [editPriceNotes, setEditPriceNotes] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [sortBy, setSortBy] = useState('name');
   const [sortOrder, setSortOrder] = useState('asc');
@@ -23,10 +25,12 @@ export default function ProductList() {
   const [newPrice, setNewPrice] = useState('');
   const [newCategory, setNewCategory] = useState('Herramientas');
   const [newNotes, setNewNotes] = useState('');
+  const [newPriceNotes, setNewPriceNotes] = useState('');
   const [addError, setAddError] = useState(null);
   const [successMessage, setSuccessMessage] = useState(null);
   const [location, setLocation] = useState({ lat: null, lng: null });
   const [showMap, setShowMap] = useState(false);
+  const navigate = useNavigate();
 
   const categories = [
     'Herramientas',
@@ -70,20 +74,12 @@ export default function ProductList() {
       }
     );
 
-    const handleOffline = () => {
-      console.log('Modo offline');
-      setIsOffline(true);
-    };
-    const handleOnline = () => {
-      console.log('Modo online');
-      setIsOffline(false);
-    };
-
+    const handleOffline = () => setIsOffline(true);
+    const handleOnline = () => setIsOffline(false);
     window.addEventListener('offline', handleOffline);
     window.addEventListener('online', handleOnline);
 
     return () => {
-      console.log('Desmontando suscripción');
       unsubscribe();
       window.removeEventListener('offline', handleOffline);
       window.removeEventListener('online', handleOnline);
@@ -109,7 +105,7 @@ export default function ProductList() {
 
   const handleAddProduct = async (e) => {
     e.preventDefault();
-    console.log('Intentando agregar producto:', { newName, newPrice, newCategory, newNotes, location });
+    console.log('Intentando agregar producto:', { newName, newPrice, newCategory, newNotes, newPriceNotes, location });
     if (!newName || !newPrice) {
       console.log('Campos vacíos');
       setAddError('Por favor, completa nombre y precio.');
@@ -123,13 +119,19 @@ export default function ProductList() {
     try {
       const newProduct = {
         name: newName,
-        price: parseFloat(newPrice),
         category: newCategory,
         notes: newNotes,
         createdAt: serverTimestamp(),
         isFavorite: false,
+        prices: [
+          {
+            price: parseFloat(newPrice),
+            location: location.lat && location.lng ? { lat: location.lat, lng: location.lng } : null,
+            date: new Date().toISOString(),
+            notes: newPriceNotes,
+          },
+        ],
         ...(auth.currentUser && { userId: auth.currentUser.uid }),
-        ...(location.lat && location.lng && { location: { lat: location.lat, lng: location.lng } }),
       };
       console.log('Enviando a Firestore:', newProduct);
       const docRef = await addDoc(collection(db, 'products'), newProduct);
@@ -139,6 +141,7 @@ export default function ProductList() {
       setNewPrice('');
       setNewCategory('Herramientas');
       setNewNotes('');
+      setNewPriceNotes('');
       setLocation({ lat: null, lng: null });
       setShowMap(false);
       setAddError(null);
@@ -165,33 +168,42 @@ export default function ProductList() {
   const handleEdit = (product) => {
     setEditingId(product.id);
     setEditName(product.name);
-    setEditPrice(product.price.toString());
     setEditCategory(product.category || 'Herramientas');
     setEditNotes(product.notes || '');
+    setEditPrice('');
+    setEditPriceNotes('');
   };
 
   const handleSave = async (id) => {
-    if (!editName || !editPrice) {
-      setError('Por favor, completa todos los campos.');
-      return;
-    }
-    if (isNaN(editPrice) || parseFloat(editPrice) <= 0) {
-      setError('El precio debe ser un número positivo.');
+    if (!editName) {
+      setError('Por favor, completa el nombre.');
       return;
     }
     try {
-      await updateDoc(doc(db, 'products', id), {
+      const updates = {
         name: editName,
-        price: parseFloat(editPrice),
         category: editCategory,
         notes: editNotes,
-      });
+      };
+      if (editPrice && !isNaN(editPrice) && parseFloat(editPrice) > 0) {
+        updates.prices = [
+          ...(products.find((p) => p.id === id)?.prices || []),
+          {
+            price: parseFloat(editPrice),
+            location: location.lat && location.lng ? { lat: location.lat, lng: location.lng } : null,
+            date: new Date().toISOString(),
+            notes: editPriceNotes,
+          },
+        ];
+      }
+      await updateDoc(doc(db, 'products', id), updates);
       console.log('Producto actualizado, ID:', id);
       setEditingId(null);
       setEditName('');
-      setEditPrice('');
       setEditCategory('Herramientas');
       setEditNotes('');
+      setEditPrice('');
+      setEditPriceNotes('');
       setError(null);
     } catch (err) {
       console.error('Error al guardar cambios:', err.code, err.message);
@@ -220,15 +232,31 @@ export default function ProductList() {
   });
 
   const sortedProducts = [...filteredProducts].sort((a, b) => {
-    const valueA = sortBy === 'name' ? a.name.toLowerCase() : a.price;
-    const valueB = sortBy === 'name' ? b.name.toLowerCase() : b.price;
+    const valueA = sortBy === 'name' ? a.name.toLowerCase() : getLatestPrice(a)?.price || 0;
+    const valueB = sortBy === 'name' ? b.name.toLowerCase() : getLatestPrice(b)?.price || 0;
     return sortOrder === 'asc' ? (valueA > valueB ? 1 : -1) : (valueA < valueB ? 1 : -1);
   });
 
+  const getLatestPrice = (product) => {
+    if (!product.prices || product.prices.length === 0) return null;
+    return product.prices.sort((a, b) => new Date(b.date) - new Date(a.date))[0];
+  };
+
+  const getLowestPrice = (product) => {
+    if (!product.prices || product.prices.length === 0) return null;
+    return product.prices.reduce((min, p) => (p.price < min.price ? p : min), product.prices[0]);
+  };
+
   const exportToCSV = () => {
-    const headers = ['ID,Nombre,Precio,Categoría,Notas,FechaCreación,Latitud,Longitud,Favorito'];
-    const rows = sortedProducts.map((product) =>
-      `${product.id},${product.name},${product.price.toFixed(2)},${product.category || ''},${product.notes || ''},${product.createdAt?.toDate?.().toISOString?.() || ''},${product.location?.lat || ''},${product.location?.lng || ''},${product.isFavorite ? 'Sí' : 'No'}`
+    const headers = ['ID,Nombre,Categoría,Notas,Favorito,Precio,Fecha,Ubicación Lat,Ubicación Lng,Notas Precio'];
+    const rows = sortedProducts.flatMap((product) =>
+      (product.prices || []).map((price) =>
+        `${product.id},${product.name},${product.category || ''},${product.notes || ''},${
+          product.isFavorite ? 'Sí' : 'No'
+        },${price.price.toFixed(2)},${price.date || ''},${price.location?.lat || ''},${
+          price.location?.lng || ''
+        },${price.notes || ''}`
+      )
     );
     const csvContent = [headers, ...rows].join('\n');
     const blob = new Blob([csvContent], { type: 'text/csv' });
@@ -307,106 +335,140 @@ export default function ProductList() {
         </p>
       ) : (
         <ul className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-          {sortedProducts.map((product) => (
-            <li
-              key={product.id}
-              className="bg-gray-800/70 backdrop-blur-sm rounded-xl shadow-lg p-6 border border-gray-700/50 flex flex-col justify-between transition-all hover:scale-105 hover:shadow-xl"
-            >
-              {editingId === product.id ? (
-                <div className="flex flex-col gap-3 w-full">
-                  <input
-                    type="text"
-                    value={editName}
-                    onChange={(e) => setEditName(e.target.value)}
-                    className="border-none bg-gray-700/50 text-white p-2 rounded-lg focus:ring-2 focus:ring-blue-500"
-                    placeholder="Nombre"
-                  />
-                  <input
-                    type="number"
-                    value={editPrice}
-                    onChange={(e) => setEditPrice(e.target.value)}
-                    className="border-none bg-gray-700/50 text-white p-2 rounded-lg focus:ring-2 focus:ring-blue-500"
-                    placeholder="Precio"
-                    step="0.01"
-                  />
-                  <select
-                    value={editCategory}
-                    onChange={(e) => setEditCategory(e.target.value)}
-                    className="border-none bg-gray-700/50 text-white p-2 rounded-lg focus:ring-2 focus:ring-blue-500"
-                  >
-                    {categories.map((cat) => (
-                      <option key={cat} value={cat}>
-                        {cat}
-                      </option>
-                    ))}
-                  </select>
-                  <textarea
-                    value={editNotes}
-                    onChange={(e) => setEditNotes(e.target.value)}
-                    className="border-none bg-gray-700/50 text-white p-2 rounded-lg focus:ring-2 focus:ring-blue-500"
-                    rows="3"
-                    placeholder="Notas"
-                  />
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => handleSave(product.id)}
-                      className="bg-green-600 hover:bg-green-700 text-white p-2 rounded-lg flex-1 transition-all"
+          {sortedProducts.map((product) => {
+            const latestPrice = getLatestPrice(product);
+            const lowestPrice = getLowestPrice(product);
+            return (
+              <li
+                key={product.id}
+                className="bg-gray-800/70 backdrop-blur-sm rounded-xl shadow-lg p-6 border border-gray-700/50 flex flex-col justify-between transition-all hover:scale-105 hover:shadow-xl"
+              >
+                {editingId === product.id ? (
+                  <div className="flex flex-col gap-3 w-full">
+                    <input
+                      type="text"
+                      value={editName}
+                      onChange={(e) => setEditName(e.target.value)}
+                      className="border-none bg-gray-700/50 text-white p-2 rounded-lg focus:ring-2 focus:ring-blue-500"
+                      placeholder="Nombre"
+                    />
+                    <select
+                      value={editCategory}
+                      onChange={(e) => setEditCategory(e.target.value)}
+                      className="border-none bg-gray-700/50 text-white p-2 rounded-lg focus:ring-2 focus:ring-blue-500"
                     >
-                      Guardar
-                    </button>
-                    <button
-                      onClick={() => setEditingId(null)}
-                      className="bg-gray-600 hover:bg-gray-700 text-white p-2 rounded-lg flex-1 transition-all"
-                    >
-                      Cancelar
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <>
-                  <div className="flex flex-col gap-2">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-xl font-bold text-white truncate flex-1">
-                        {product.name}
-                      </span>
+                      {categories.map((cat) => (
+                        <option key={cat} value={cat}>
+                          {cat}
+                        </option>
+                      ))}
+                    </select>
+                    <textarea
+                      value={editNotes}
+                      onChange={(e) => setEditNotes(e.target.value)}
+                      className="border-none bg-gray-700/50 text-white p-2 rounded-lg focus:ring-2 focus:ring-blue-500"
+                      rows="3"
+                      placeholder="Notas generales"
+                    />
+                    <input
+                      type="number"
+                      value={editPrice}
+                      onChange={(e) => setEditPrice(e.target.value)}
+                      className="border-none bg-gray-700/50 text-white p-2 rounded-lg focus:ring-2 focus:ring-blue-500"
+                      placeholder="Nuevo precio (opcional)"
+                      step="0.01"
+                    />
+                    <input
+                      type="text"
+                      value={editPriceNotes}
+                      onChange={(e) => setEditPriceNotes(e.target.value)}
+                      className="border-none bg-gray-700/50 text-white p-2 rounded-lg focus:ring-2 focus:ring-blue-500"
+                      placeholder="Notas del precio (ej. Feria X)"
+                    />
+                    <div className="flex gap-2">
                       <button
-                        onClick={() => toggleFavorite(product.id, product.isFavorite)}
-                        className={`text-lg p-1 w-6 h-6 ${product.isFavorite ? 'text-yellow-400' : 'text-gray-400'} hover:text-yellow-300 transition-colors`}
-                        title={product.isFavorite ? 'Quitar de favoritos' : 'Marcar como favorito'}
+                        onClick={() => handleSave(product.id)}
+                        className="bg-green-600 hover:bg-green-700 text-white p-2 rounded-lg flex-1 transition-all"
                       >
-                        {product.isFavorite ? '🌟' : '☆'}
+                        Guardar
+                      </button>
+                      <button
+                        onClick={() => setEditingId(null)}
+                        className="bg-gray-600 hover:bg-gray-700 text-white p-2 rounded-lg flex-1 transition-all"
+                      >
+                        Cancelar
                       </button>
                     </div>
-                    <span className="text-blue-300 font-semibold">${product.price.toFixed(2)}</span>
-                    <span className="text-sm text-blue-200">{product.category}</span>
-                    {product.notes && (
-                      <small className="text-gray-300 line-clamp-3">{product.notes}</small>
-                    )}
-                    {product.location && (
-                      <small className="text-gray-300">
-                        Ubicación: {product.location.lat.toFixed(4)},{' '}
-                        {product.location.lng.toFixed(4)}
-                      </small>
-                    )}
                   </div>
-                  <div className="mt-4 flex gap-2">
-                    <button
-                      onClick={() => handleEdit(product)}
-                      className="bg-yellow-600 hover:bg-yellow-700 text-white px-4 py-2 rounded-lg flex-1 transition-all"
-                    >
-                      Editar
-                    </button>
-                    <button
-                      onClick={() => handleDelete(product.id)}
-                      className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg flex-1 transition-all"
-                    >
-                      Eliminar
-                    </button>
-                  </div>
-                </>
-              )}
-            </li>
-          ))}
+                ) : (
+                  <>
+                    <div className="flex flex-col gap-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-xl font-bold text-white truncate flex-1">
+                          {product.name}
+                        </span>
+                        <button
+                          onClick={() => toggleFavorite(product.id, product.isFavorite)}
+                          className={`text-lg p-1 w-6 h-6 ${
+                            product.isFavorite ? 'text-yellow-400' : 'text-gray-400'
+                          } hover:text-yellow-300 transition-colors`}
+                          title={product.isFavorite ? 'Quitar de favoritos' : 'Marcar como favorito'}
+                        >
+                          {product.isFavorite ? '🌟' : '☆'}
+                        </button>
+                      </div>
+                      {latestPrice ? (
+                        <>
+                          <span className="text-blue-300 font-semibold">
+                            ${latestPrice.price.toFixed(2)}
+                            {lowestPrice && lowestPrice.price < latestPrice.price && (
+                              <span className="text-green-400 text-sm ml-2">
+                                (Mín: ${lowestPrice.price.toFixed(2)})
+                              </span>
+                            )}
+                          </span>
+                          <span className="text-sm text-gray-300">{latestPrice.notes}</span>
+                        </>
+                      ) : (
+                        <span className="text-gray-400">Sin precios</span>
+                      )}
+                      <span className="text-sm text-blue-200">{product.category}</span>
+                      {product.notes && (
+                        <small className="text-gray-300 line-clamp-3">{product.notes}</small>
+                      )}
+                      {latestPrice?.location && (
+                        <small className="text-gray-300">
+                          Ubicación: {latestPrice.location.lat.toFixed(4)},{' '}
+                          {latestPrice.location.lng.toFixed(4)}
+                        </small>
+                      )}
+                    </div>
+                    <div className="mt-4 flex gap-2">
+                      <button
+                        onClick={() => navigate('/prices')}
+                        className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex-1 transition-all"
+                        disabled={!product.prices || product.prices.length === 0}
+                      >
+                        Ver precios
+                      </button>
+                      <button
+                        onClick={() => handleEdit(product)}
+                        className="bg-yellow-600 hover:bg-yellow-700 text-white px-4 py-2 rounded-lg flex-1 transition-all"
+                      >
+                        Editar
+                      </button>
+                      <button
+                        onClick={() => handleDelete(product.id)}
+                        className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg flex-1 transition-all"
+                      >
+                        Eliminar
+                      </button>
+                    </div>
+                  </>
+                )}
+              </li>
+            );
+          })}
         </ul>
       )}
       {showModal && (
@@ -447,6 +509,13 @@ export default function ProductList() {
                 min="0"
                 step="0.01"
               />
+              <input
+                type="text"
+                value={newPriceNotes}
+                onChange={(e) => setNewPriceNotes(e.target.value)}
+                placeholder="Notas del precio (ej. Feria X)"
+                className="border-none bg-gray-700/50 text-white p-3 rounded-lg focus:ring-2 focus:ring-blue-500 transition-all"
+              />
               <select
                 value={newCategory}
                 onChange={(e) => setNewCategory(e.target.value)}
@@ -461,7 +530,7 @@ export default function ProductList() {
               <textarea
                 value={newNotes}
                 onChange={(e) => setNewNotes(e.target.value)}
-                placeholder="Notas"
+                placeholder="Notas generales"
                 className="border-none bg-gray-700/50 text-white p-3 rounded-lg focus:ring-2 focus:ring-blue-500 transition-all"
                 rows="3"
               />

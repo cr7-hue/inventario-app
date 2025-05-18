@@ -1,44 +1,52 @@
-import { Link } from "react-router-dom";
+// src/components/sidebar.jsx
+import { NavLink, useNavigate } from 'react-router-dom'; // Aseguramos useNavigate
+import { auth } from '../services/firebase';
+import { signOut } from 'firebase/auth';
 
-// Recibe la prop isSidebarOpen
-export default function Sidebar({ isSidebarOpen }) {
+export default function Sidebar() {
+  const navigate = useNavigate();
+
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+      console.log('Usuario deslogueado');
+      navigate('/login');
+    } catch (err) {
+      console.error('Error al cerrar sesión:', err.code, err.message);
+    }
+  };
+
   return (
-    // Ajusta las clases para responsive y visibilidad
-    <aside
-      className={`fixed top-0 left-0 h-full w-64 bg-gray-900 shadow-lg z-40 transition-transform duration-300 ease-in-out
-        ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} // Oculta por defecto en móviles
-        md:translate-x-0 // Siempre visible en md y superiores
-      `}
-    >
-      <div className="flex items-center justify-center h-20 border-b border-gray-800">
-        <span className="text-white text-2xl font-bold">Inventario</span>
-      </div>
-      <nav className="mt-10 flex flex-col">
-        <Link
+    <div className="w-64 bg-gray-800/70 text-white flex flex-col p-6 min-h-screen">
+      <h2 className="text-2xl font-bold mb-8">Inventario</h2>
+      <nav className="flex flex-col gap-4">
+        <NavLink
           to="/home"
-          className="text-gray-300 hover:bg-gray-800 hover:text-white px-6 py-3 transition-all duration-200 rounded hover:scale-105"
+          className={({ isActive }) =>
+            `p-3 rounded-lg transition-colors ${
+              isActive ? 'bg-blue-600 text-white' : 'hover:bg-gray-700'
+            }`
+          }
         >
-          Inicio
-        </Link>
-        <Link
-          to="#"
-          className="text-gray-300 hover:bg-gray-800 hover:text-white px-6 py-3 transition-all duration-200 rounded hover:scale-105"
+          Home
+        </NavLink>
+        <NavLink
+          to="/prices"
+          className={({ isActive }) =>
+            `p-3 rounded-lg transition-colors ${
+              isActive ? 'bg-blue-600 text-white' : 'hover:bg-gray-700'
+            }`
+          }
         >
-          Nosotros
-        </Link>
-        <Link
-          to="#"
-          className="text-gray-300 hover:bg-gray-800 hover:text-white px-6 py-3 transition-all duration-200 rounded hover:scale-105"
+          Comparador de Precios
+        </NavLink>
+        <button
+          onClick={handleLogout}
+          className="p-3 rounded-lg text-left hover:bg-gray-700 transition-colors"
         >
-          Blog
-        </Link>
-        <Link
-          to="#"
-          className="text-gray-300 hover:bg-gray-800 hover:text-white px-6 py-3 transition-all duration-200 rounded hover:scale-105"
-        >
-          Contacto
-        </Link>
+          Logout
+        </button>
       </nav>
-    </aside>
+    </div>
   );
 }
