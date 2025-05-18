@@ -1,12 +1,22 @@
+jsx
 import { useState } from "react";
 
-export default function Header() {
+// Recibe la prop toggleSidebar
+export default function Header({ toggleSidebar }) {
   const [open, setOpen] = useState(false);
 
   return (
-    <header className="fixed top-0 left-64 w-[calc(100%-16rem)] h-20 bg-white/10 backdrop-blur flex items-center px-8 shadow z-30 justify-end">
+    <header className="fixed top-0 left-0 md:left-64 w-full md:w-[calc(100%-16rem)] h-20 bg-white/10 backdrop-blur flex items-center px-4 md:px-8 shadow z-30 justify-between md:justify-end">
+      {/* Botón para alternar la sidebar - visible solo en pantallas pequeñas */}
+      <button
+        className="text-white text-2xl md:hidden" // Visible solo en móviles
+        onClick={toggleSidebar} // Llama a toggleSidebar al hacer clic
+      >
+        ☰ {/* Ícono de hamburguesa simple */}
+      </button>
+
       <div className="relative flex items-center gap-4">
-        <span className="text-white font-medium">Usuario</span>
+        <span className="text-white font-medium hidden md:block">Usuario</span> {/* Oculta el texto "Usuario" en móviles */}
         <img
           src="https://i.pravatar.cc/40"
           alt="avatar"

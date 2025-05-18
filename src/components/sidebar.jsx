@@ -1,8 +1,15 @@
 import { Link } from "react-router-dom";
 
-export default function sidebar() {
+// Recibe la prop isSidebarOpen
+export default function Sidebar({ isSidebarOpen }) {
   return (
-    <aside className="fixed top-0 left-0 h-full w-64 bg-gray-900 shadow-lg z-40">
+    // Ajusta las clases para responsive y visibilidad
+    <aside
+      className={`fixed top-0 left-0 h-full w-64 bg-gray-900 shadow-lg z-40 transition-transform duration-300 ease-in-out
+        ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} // Oculta por defecto en móviles
+        md:translate-x-0 // Siempre visible en md y superiores
+      `}
+    >
       <div className="flex items-center justify-center h-20 border-b border-gray-800">
         <span className="text-white text-2xl font-bold">Inventario</span>
       </div>
