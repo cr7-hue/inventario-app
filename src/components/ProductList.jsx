@@ -15,7 +15,7 @@ export default function ProductList() {
   const [sortOrder, setSortOrder] = useState('asc');
   const [isOffline, setIsOffline] = useState(false);
 
-  // Estado para el modal de agregar producto
+ 
   const [showModal, setShowModal] = useState(false);
   const [newName, setNewName] = useState('');
   const [newPrice, setNewPrice] = useState('');
