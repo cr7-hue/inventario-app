@@ -1,42 +1,57 @@
-// src/components/sidebar.jsx
-import { NavLink, useNavigate } from 'react-router-dom'; // Aseguramos useNavigate
+import { useState, useEffect } from 'react';
+import { NavLink } from 'react-router-dom';
 import { auth } from '../services/firebase';
-import { signOut } from 'firebase/auth';
 
-export default function Sidebar() {
-  const navigate = useNavigate();
+export default function Sidebar({ isOpen, onClose }) {
+  const [userEmail, setUserEmail] = useState('');
 
-  const handleLogout = async () => {
-    try {
-      await signOut(auth);
-      console.log('Usuario deslogueado');
-      navigate('/login');
-    } catch (err) {
-      console.error('Error al cerrar sesión:', err.code, err.message);
+  useEffect(() => {
+    const user = auth.currentUser;
+    if (user) {
+      setUserEmail(user.email);
     }
-  };
+  }, []);
 
   return (
-    <div className="w-64 bg-gray-800/70 text-white flex flex-col p-6 min-h-screen">
-      <h2 className="text-2xl font-bold mb-8">Inventario</h2>
-      <nav className="flex flex-col gap-4">
-        <NavLink
-          to="/home"
-          className={({ isActive }) =>
-            `p-3 rounded-lg transition-colors ${
-              isActive ? 'bg-blue-600 text-white' : 'hover:bg-gray-700'
-            }`
-          }
-        >
-          Home
-        </NavLink>
-        <button
-          onClick={handleLogout}
-          className="p-3 rounded-lg text-left hover:bg-gray-700 transition-colors"
-        >
-          Logout
-        </button>
-      </nav>
-    </div>
+    <>
+      {/* Sidebar con comportamiento independiente */}
+      <aside 
+        className={`fixed top-0 left-0 h-full w-64 bg-gray-800 shadow-lg z-40 transform transition-all duration-300 ease-in-out ${
+          isOpen ? 'translate-x-0' : '-translate-x-full'
+        }`}
+      >
+        <div className="p-4 border-b border-gray-700">
+          <div className="flex justify-between items-center">
+            <h2 className="text-xl font-bold text-white">Inventario App</h2>
+            <button 
+              onClick={onClose}
+              className="text-white md:hidden"
+            >
+              ✖
+            </button>
+          </div>
+          <p className="text-sm text-gray-300 truncate">{userEmail}</p>
+        </div>
+
+        <nav className="p-4">
+          <ul className="space-y-2">
+            <li>
+              <NavLink 
+                to="/home" 
+                className={({ isActive }) => 
+                  `block px-4 py-2 rounded-lg transition-colors ${
+                    isActive ? 'bg-blue-600 text-white' : 'text-gray-300 hover:bg-gray-700'
+                  }`
+                }
+                onClick={onClose}
+              >
+                Inicio
+              </NavLink>
+            </li>
+            {/* Resto de enlaces... */}
+          </ul>
+        </nav>
+      </aside>
+    </>
   );
 }
