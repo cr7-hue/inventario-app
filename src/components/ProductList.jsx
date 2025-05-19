@@ -1,10 +1,40 @@
-// src/components/ProductList.jsx
 import { useState, useEffect } from 'react';
 import { db, auth } from '../services/firebase';
 import { collection, onSnapshot, deleteDoc, doc, updateDoc, addDoc, serverTimestamp } from 'firebase/firestore';
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
-import 'leaflet/dist/leaflet.css';
-import { useNavigate } from 'react-router-dom'; // Aseguramos la importación
+import { useNavigate } from 'react-router-dom';
+
+// Componente MapWrapper para renderizar el mapa solo en el cliente
+const MapWrapper = ({ lat, lng }) => {
+  const [isClient, setIsClient] = useState(false);
+
+  // Cargar CSS de Leaflet solo en el cliente
+  useEffect(() => {
+    setIsClient(true);
+    import('leaflet/dist/leaflet.css');
+  }, []);
+
+  if (!isClient) return null;
+
+  return (
+    <div className="h-64 rounded-lg overflow-hidden">
+      <MapContainer
+        center={[lat, lng]}
+        zoom={13}
+        style={{ height: '100%', width: '100%' }}
+        className="rounded-lg"
+      >
+        <TileLayer
+          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+          attribution='© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        />
+        <Marker position={[lat, lng]}>
+          <Popup>Ubicación actual</Popup>
+        </Marker>
+      </MapContainer>
+    </div>
+  );
+};
 
 export default function ProductList() {
   const [products, setProducts] = useState([]);
@@ -248,6 +278,7 @@ export default function ProductList() {
   };
 
   const exportToCSV = () => {
+    if (typeof window === 'undefined') return; // Evita ejecución en servidor
     const headers = ['ID,Nombre,Categoría,Notas,Favorito,Precio,Fecha,Ubicación Lat,Ubicación Lng,Notas Precio'];
     const rows = sortedProducts.flatMap((product) =>
       (product.prices || []).map((price) =>
@@ -444,7 +475,6 @@ export default function ProductList() {
                       )}
                     </div>
                     <div className="mt-4 flex gap-2">
-                      {/* Botón "Ver precios" desactivado hasta implementar /prices */}
                       <button
                         onClick={() => alert('Comparador de precios no implementado aún')}
                         className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex-1 transition-all"
@@ -548,22 +578,7 @@ export default function ProductList() {
                 {showMap ? 'Ocultar mapa' : 'Mostrar mapa'}
               </button>
               {showMap && location.lat && location.lng && (
-                <div className="h-64 rounded-lg overflow-hidden">
-                  <MapContainer
-                    center={[location.lat, location.lng]}
-                    zoom={13}
-                    style={{ height: '100%', width: '100%' }}
-                    className="rounded-lg"
-                  >
-                    <TileLayer
-                      url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                      attribution='© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-                    />
-                    <Marker position={[location.lat, location.lng]}>
-                      <Popup>Ubicación actual</Popup>
-                    </Marker>
-                  </MapContainer>
-                </div>
+                <MapWrapper lat={location.lat} lng={location.lng} />
               )}
               <button
                 type="submit"

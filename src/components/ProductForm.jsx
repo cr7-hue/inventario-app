@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { db } from '../services/firebase';
 import { collection, addDoc } from 'firebase/firestore';
@@ -10,8 +9,10 @@ export default function ProductForm() {
   const [notes, setNotes] = useState('');
   const [location, setLocation] = useState({ lat: null, lng: null });
   const [error, setError] = useState(null);
+  const [isClient, setIsClient] = useState(false);
 
   useEffect(() => {
+    setIsClient(true); // Marca que estamos en el cliente
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         (position) => {
@@ -61,28 +62,27 @@ export default function ProductForm() {
   };
 
   return (
-    // Ajusta las clases para responsive (ancho máximo y centrado)
-    <div className="p-4 max-w-md mx-auto"> {/* Añadidas max-w-md y mx-auto */}
+    <div className="p-4 max-w-md mx-auto">
       <h3 className="text-xl font-bold mb-2">Agregar Producto</h3>
-      <form onSubmit={handleSubmit} className="flex flex-col gap-4"> {/* Añadido gap para espacio entre campos */}
+      <form onSubmit={handleSubmit} className="flex flex-col gap-4">
         <input
           type="text"
           value={name}
           onChange={(e) => setName(e.target.value)}
           placeholder="Nombre del producto"
-          className="border p-2 w-full rounded" // Añadida rounded
+          className="border p-2 w-full rounded"
         />
         <input
           type="number"
           value={price}
           onChange={(e) => setPrice(e.target.value)}
           placeholder="Precio"
-          className="border p-2 w-full rounded" // Añadida rounded
+          className="border p-2 w-full rounded"
         />
         <select
           value={category}
           onChange={(e) => setCategory(e.target.value)}
-          className="border p-2 w-full rounded" // Añadida rounded
+          className="border p-2 w-full rounded"
         >
           <option value="Herramientas">Herramientas</option>
           <option value="Alimentos">Alimentos</option>
@@ -91,15 +91,17 @@ export default function ProductForm() {
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
           placeholder="Notas (opcional)"
-          className="border p-2 w-full rounded" // Añadida rounded
+          className="border p-2 w-full rounded"
           rows="3"
         />
-        <p className="text-sm"> {/* Eliminado mb-2 */}
-          Ubicación: {location.lat && location.lng
-            ? `Lat: ${location.lat.toFixed(6)}, Lng: ${location.lng.toFixed(6)}`
-            : 'Obteniendo ubicación...'}
-        </p>
-        <button type="submit" className="bg-blue-500 text-white p-2 rounded hover:bg-blue-600 transition-colors duration-200"> {/* Añadidos rounded, hover y transition */}
+        {isClient && (
+          <p className="text-sm">
+            Ubicación: {location.lat && location.lng
+              ? `Lat: ${location.lat.toFixed(6)}, Lng: ${location.lng.toFixed(6)}`
+              : 'Obteniendo ubicación...'}
+          </p>
+        )}
+        <button type="submit" className="bg-blue-500 text-white p-2 rounded hover:bg-blue-600 transition-colors duration-200">
           Agregar
         </button>
         {error && <p className="text-red-500 mt-2">{error}</p>}

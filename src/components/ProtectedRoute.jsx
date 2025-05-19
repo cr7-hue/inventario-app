@@ -7,13 +7,13 @@ export default function ProtectedRoute() {
 
   useEffect(() => {
     const unsubscribe = auth.onAuthStateChanged((user) => {
-      setIsAuthenticated(!!user); // true si hay usuario, false si no
+      setIsAuthenticated(!!user);
     });
-    return () => unsubscribe(); // Limpia el listener al desmontar
+    return () => unsubscribe();
   }, []);
 
   if (isAuthenticated === null) {
-    return <div>Cargando...</div>; // Mostrar algo mientras se verifica
+    return <div className="text-white text-center p-8">Verificando autenticación...</div>;
   }
 
   return isAuthenticated ? <Outlet /> : <Navigate to="/login" replace />;

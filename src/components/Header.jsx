@@ -1,4 +1,7 @@
 import { useState } from "react";
+import { useNavigate } from 'react-router-dom';
+import { signOut } from 'firebase/auth';
+import { auth } from '../services/firebase';
 
 export default function Header() {
   const [open, setOpen] = useState(false);
@@ -17,7 +20,7 @@ export default function Header() {
   return (
     <header className="fixed top-0 left-64 w-[calc(100%-16rem)] h-20 bg-white/10 backdrop-blur flex items-center px-8 shadow z-30 justify-end">
       <div className="relative flex items-center gap-4">
-        <span className="text-white font-medium hidden md:block">Usuario</span> {/* Oculta el texto "Usuario" en móviles */}
+        <span className="text-white font-medium hidden md:block">Usuario</span>
         <img
           src="https://i.pravatar.cc/40"
           alt="avatar"
